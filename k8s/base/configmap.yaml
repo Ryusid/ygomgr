@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ygomgr-config
+  namespace: ygomgr
+data:
+  MARIADB_HOST: "mariadb"
+  MARIADB_PORT: "3306"
+  MARIADB_DATABASE: "ygomgr"
+  MARIADB_USER: "ygouser"
+  BACKEND_URL: "http://backend:8000"
+  NEXT_PUBLIC_BACKEND_URL: "http://backend:8000"

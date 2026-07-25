@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb
+  namespace: ygomgr
+  labels:
+    app.kubernetes.io/name: mariadb
+    app.kubernetes.io/part-of: ygomgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11.3
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ygomgr-secret
+                  key: MARIADB_ROOT_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_DATABASE
+            - name: MYSQL_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ygomgr-secret
+                  key: MARIADB_PASSWORD
+          volumeMounts:
+            - name: mariadb-data
+              mountPath: /var/lib/mysql
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: mariadb-data
+          persistentVolumeClaim:
+            claimName: mariadb-pvc
+        - name: init-sql
+          configMap:
+            name: mariadb-init-sql

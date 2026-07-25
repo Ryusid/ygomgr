@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ygomgr
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: ygomgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ygomgr-frontend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: BACKEND_URL
+            - name: NEXT_PUBLIC_BACKEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: NEXT_PUBLIC_BACKEND_URL
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

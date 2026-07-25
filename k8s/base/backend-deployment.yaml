@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: ygomgr
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: ygomgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ygomgr-backend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: MARIADB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_HOST
+            - name: MARIADB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_PORT
+            - name: MARIADB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_DATABASE
+            - name: MARIADB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: ygomgr-config
+                  key: MARIADB_USER
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ygomgr-secret
+                  key: MARIADB_PASSWORD
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
