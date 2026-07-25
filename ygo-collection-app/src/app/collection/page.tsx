@@ -23,10 +23,29 @@ type CollectionItem = {
   card_id: number;
   quantity_owned: number;
   updated_at: string;
-  cards: Card;
+  card: Card;
 };
 
 type SortMode = "recent" | "name" | "quantity";
+
+function isCard(value: unknown): value is Card {
+  if (!value || typeof value !== "object") return false;
+
+  const card = value as Partial<Card>;
+  return typeof card.id === "number" && typeof card.name === "string";
+}
+
+function isCollectionItem(value: unknown): value is CollectionItem {
+  if (!value || typeof value !== "object") return false;
+
+  const item = value as Partial<CollectionItem>;
+  return (
+    typeof item.card_id === "number" &&
+    typeof item.quantity_owned === "number" &&
+    typeof item.updated_at === "string" &&
+    isCard(item.card)
+  );
+}
 
 const CARD_TYPES = [
   "Effect Monster",
@@ -149,15 +168,43 @@ export default function CollectionPage() {
   const [maxLevel, setMaxLevel] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function loadCollection() {
-    const response = await fetch("/api/collection");
-    const data = await response.json();
+    try {
+      const response = await fetch("/api/collection", { cache: "no-store" });
 
-    if (Array.isArray(data)) {
-      setCollection(data);
-    } else {
+      if (!response.ok) {
+        throw new Error(
+          `Collection request failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      const data: unknown = await response.json();
+
+      if (!Array.isArray(data)) {
+        throw new Error("Unexpected collection response format");
+      }
+
+      const validItems = data.filter(isCollectionItem);
+
+      if (validItems.length !== data.length) {
+        console.warn(
+          "Ignored malformed collection rows:",
+          data.filter((item) => !isCollectionItem(item))
+        );
+      }
+
+      setCollection(validItems);
+      setError("");
+    } catch (loadError) {
+      console.error(loadError);
       setCollection([]);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load collection"
+      );
     }
   }
 
@@ -202,12 +249,19 @@ export default function CollectionPage() {
         return;
       }
 
-      const response = await fetch(`/api/cards/search?${params.toString()}`);
-      const data = await response.json();
+      try {
+        const response = await fetch(`/api/cards/search?${params.toString()}`);
 
-      if (Array.isArray(data)) {
-        setSuggestions(data);
-      } else {
+        if (!response.ok) {
+          throw new Error(
+            `Card search failed: ${response.status} ${await response.text()}`
+          );
+        }
+
+        const data: unknown = await response.json();
+        setSuggestions(Array.isArray(data) ? data.filter(isCard) : []);
+      } catch (searchError) {
+        console.error(searchError);
         setSuggestions([]);
       }
     }, 250);
@@ -230,19 +284,35 @@ export default function CollectionPage() {
   async function setOwnedQuantity(card: Card, quantity: number) {
     setLoading(true);
 
-    await fetch("/api/collection", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        card_id: card.id,
-        quantity_owned: quantity,
-      }),
-    });
+    try {
+      const response = await fetch("/api/collection", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          card_id: card.id,
+          quantity_owned: quantity,
+        }),
+      });
 
-    await loadCollection();
-    setLoading(false);
+      if (!response.ok) {
+        throw new Error(
+          `Collection update failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      await loadCollection();
+    } catch (updateError) {
+      console.error(updateError);
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Could not update collection"
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function addOne(card: Card) {
@@ -284,7 +354,7 @@ export default function CollectionPage() {
 
     if (query.length > 0) {
       items = collection.filter((item) => {
-        const card = item.cards;
+        const card = item.card;
 
         const searchable = [
           card.name,
@@ -307,7 +377,7 @@ export default function CollectionPage() {
 
     return [...items].sort((a, b) => {
       if (sortMode === "name") {
-        return a.cards.name.localeCompare(b.cards.name);
+        return a.card.name.localeCompare(b.card.name);
       }
 
       if (sortMode === "quantity") {
@@ -330,6 +400,12 @@ export default function CollectionPage() {
             collection.
           </p>
         </header>
+
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
 
         <section className="mb-8 rounded-2xl border bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -564,10 +640,10 @@ export default function CollectionPage() {
                   className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-4">
-                    {item.cards.image_url ? (
+                    {item.card.image_url ? (
                       <img
-                        src={item.cards.image_url}
-                        alt={item.cards.name}
+                        src={item.card.image_url}
+                        alt={item.card.name}
                         className="h-28 w-20 flex-shrink-0 rounded object-cover"
                       />
                     ) : (
@@ -576,15 +652,15 @@ export default function CollectionPage() {
 
                     <div className="min-w-0">
                       <div className="text-xl font-black text-slate-950">
-                        {item.cards.name}
+                        {item.card.name}
                       </div>
 
-                      <CardBadges card={item.cards} />
-                      <CardStats card={item.cards} />
+                      <CardBadges card={item.card} />
+                      <CardStats card={item.card} />
 
-                      {item.cards.description && (
+                      {item.card.description && (
                         <p className="mt-2 line-clamp-2 max-w-2xl text-sm text-slate-600">
-                          {item.cards.description}
+                          {item.card.description}
                         </p>
                       )}
 
@@ -599,7 +675,7 @@ export default function CollectionPage() {
                       className="rounded-xl border border-slate-300 px-4 py-2 text-lg font-bold hover:bg-slate-100"
                       onClick={() =>
                         setOwnedQuantity(
-                          item.cards,
+                          item.card,
                           Math.max(0, item.quantity_owned - 1)
                         )
                       }
@@ -615,7 +691,7 @@ export default function CollectionPage() {
                     <button
                       className="rounded-xl border border-slate-300 px-4 py-2 text-lg font-bold hover:bg-slate-100"
                       onClick={() =>
-                        setOwnedQuantity(item.cards, item.quantity_owned + 1)
+                        setOwnedQuantity(item.card, item.quantity_owned + 1)
                       }
                       disabled={loading}
                     >
@@ -624,7 +700,7 @@ export default function CollectionPage() {
 
                     <button
                       className="rounded-xl border border-red-200 px-4 py-2 font-semibold text-red-600 hover:bg-red-50"
-                      onClick={() => setOwnedQuantity(item.cards, 0)}
+                      onClick={() => setOwnedQuantity(item.card, 0)}
                       disabled={loading}
                     >
                       Remove

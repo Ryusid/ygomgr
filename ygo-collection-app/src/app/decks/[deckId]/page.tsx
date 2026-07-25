@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { MouseEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent } from "react";
 
 type Section = "main" | "extra" | "side";
 
@@ -37,7 +38,7 @@ type DeckCard = {
   id: string;
   quantity: number;
   section: Section;
-  cards: Card;
+  card: Card;
 };
 
 type Deck = {
@@ -50,8 +51,51 @@ type Deck = {
 type CollectionItem = {
   card_id: number;
   quantity_owned: number;
-  cards: Card;
+  card: Card;
 };
+
+function isCard(value: unknown): value is Card {
+  if (!value || typeof value !== "object") return false;
+
+  const card = value as Partial<Card>;
+  return typeof card.id === "number" && typeof card.name === "string";
+}
+
+function isDeckCard(value: unknown): value is DeckCard {
+  if (!value || typeof value !== "object") return false;
+
+  const deckCard = value as Partial<DeckCard>;
+  return (
+    typeof deckCard.id === "string" &&
+    typeof deckCard.quantity === "number" &&
+    (deckCard.section === "main" ||
+      deckCard.section === "extra" ||
+      deckCard.section === "side") &&
+    isCard(deckCard.card)
+  );
+}
+
+function isCollectionItem(value: unknown): value is CollectionItem {
+  if (!value || typeof value !== "object") return false;
+
+  const item = value as Partial<CollectionItem>;
+  return (
+    typeof item.card_id === "number" &&
+    typeof item.quantity_owned === "number" &&
+    isCard(item.card)
+  );
+}
+
+function isDeckUsageEntry(value: unknown): value is DeckUsageEntry {
+  if (!value || typeof value !== "object") return false;
+
+  const entry = value as Partial<DeckUsageEntry>;
+  return (
+    typeof entry.card_id === "number" &&
+    typeof entry.quantity_used_elsewhere === "number" &&
+    Array.isArray(entry.decks)
+  );
+}
 
 const CARD_TYPES = [
   "Effect Monster",
@@ -203,24 +247,51 @@ export default function DeckEditorPage() {
   const [maxLevel, setMaxLevel] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function loadDeck() {
-    const response = await fetch(`/api/decks/${deckId}`);
-    const data = await response.json();
+    const response = await fetch(`/api/decks/${deckId}`, { cache: "no-store" });
 
-    if (data && !data.error) {
-      setDeck(data);
-      setDeckName(data.name);
+    if (!response.ok) {
+      throw new Error(
+        `Deck request failed: ${response.status} ${await response.text()}`
+      );
     }
+
+    const data = await response.json();
+    const validDeckCards = Array.isArray(data.deck_cards)
+      ? data.deck_cards.filter(isDeckCard)
+      : [];
+
+    if (Array.isArray(data.deck_cards) && validDeckCards.length !== data.deck_cards.length) {
+      console.warn(
+        "Ignored malformed deck cards:",
+        data.deck_cards.filter((item: unknown) => !isDeckCard(item))
+      );
+    }
+
+    const normalizedDeck: Deck = {
+      id: String(data.id),
+      name: String(data.name),
+      created_at: String(data.created_at ?? ""),
+      deck_cards: validDeckCards,
+    };
+
+    setDeck(normalizedDeck);
+    setDeckName(normalizedDeck.name);
   }
 
   async function loadCollection() {
-    const response = await fetch("/api/collection");
-    const data = await response.json();
+    const response = await fetch("/api/collection", { cache: "no-store" });
 
-    if (Array.isArray(data)) {
-      setCollection(data);
+    if (!response.ok) {
+      throw new Error(
+        `Collection request failed: ${response.status} ${await response.text()}`
+      );
     }
+
+    const data: unknown = await response.json();
+    setCollection(Array.isArray(data) ? data.filter(isCollectionItem) : []);
   }
 
   async function loadDeckUsage() {
@@ -229,20 +300,31 @@ export default function DeckEditorPage() {
         `/api/deck-usage?excludeDeckId=${encodeURIComponent(deckId)}`
       );
 
-      const data = await response.json();
-
-      if (Array.isArray(data)) {
-        setDeckUsage(data);
-      } else {
-        setDeckUsage([]);
+      if (!response.ok) {
+        throw new Error(
+          `Deck usage request failed: ${response.status} ${await response.text()}`
+        );
       }
+
+      const data: unknown = await response.json();
+      setDeckUsage(Array.isArray(data) ? data.filter(isDeckUsageEntry) : []);
     } catch {
       setDeckUsage([]);
     }
   }
 
   async function reloadDeckData() {
-    await Promise.all([loadDeck(), loadCollection(), loadDeckUsage()]);
+    try {
+      await Promise.all([loadDeck(), loadCollection(), loadDeckUsage()]);
+      setError("");
+    } catch (reloadError) {
+      console.error(reloadError);
+      setError(
+        reloadError instanceof Error
+          ? reloadError.message
+          : "Could not load deck"
+      );
+    }
   }
 
   useEffect(() => {
@@ -275,12 +357,19 @@ export default function DeckEditorPage() {
         return;
       }
 
-      const response = await fetch(`/api/cards/search?${params.toString()}`);
-      const data = await response.json();
+      try {
+        const response = await fetch(`/api/cards/search?${params.toString()}`);
 
-      if (Array.isArray(data)) {
-        setSuggestions(data);
-      } else {
+        if (!response.ok) {
+          throw new Error(
+            `Card search failed: ${response.status} ${await response.text()}`
+          );
+        }
+
+        const data: unknown = await response.json();
+        setSuggestions(Array.isArray(data) ? data.filter(isCard) : []);
+      } catch (searchError) {
+        console.error(searchError);
         setSuggestions([]);
       }
     }, 250);
@@ -304,7 +393,9 @@ export default function DeckEditorPage() {
 
   const groupedCards = useMemo(() => {
     const sortByName = (cards: DeckCard[]) =>
-      [...cards].sort((a, b) => a.cards.name.localeCompare(b.cards.name));
+      [...cards]
+        .filter((item) => item?.card)
+        .sort((a, b) => a.card.name.localeCompare(b.card.name));
 
     return {
       main: sortByName(deckCards.filter((item) => item.section === "main")),
@@ -320,7 +411,7 @@ export default function DeckEditorPage() {
 
   function getTotalQuantityInCurrentDeck(cardId: number) {
     return deckCards
-      .filter((item) => item.cards.id === cardId)
+      .filter((item) => item.card.id === cardId)
       .reduce((total, item) => total + item.quantity, 0);
   }
 
@@ -364,16 +455,30 @@ export default function DeckEditorPage() {
 
     setLoading(true);
 
-    await fetch(`/api/decks/${deckId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name }),
-    });
+    try {
+      const response = await fetch(`/api/decks/${deckId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
 
-    await reloadDeckData();
-    setLoading(false);
+      if (!response.ok) {
+        throw new Error(
+          `Rename failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      await reloadDeckData();
+    } catch (renameError) {
+      console.error(renameError);
+      setError(
+        renameError instanceof Error ? renameError.message : "Could not rename deck"
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function addCardToDeck(card: Card, section: Section) {
@@ -381,68 +486,113 @@ export default function DeckEditorPage() {
 
     setLoading(true);
 
-    const existing = deck.deck_cards.find(
-      (item) => item.cards.id === card.id && item.section === section
-    );
+    try {
+      const existing = deck.deck_cards.find(
+        (item) => item.card.id === card.id && item.section === section
+      );
 
-    if (existing) {
-      await fetch(`/api/decks/${deckId}/cards/${existing.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          quantity: existing.quantity + 1,
-        }),
-      });
-    } else {
-      await fetch(`/api/decks/${deckId}/cards`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          card_id: card.id,
-          quantity: 1,
-          section,
-        }),
-      });
+      const response = existing
+        ? await fetch(`/api/decks/cards/${existing.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              quantity: existing.quantity + 1,
+            }),
+          })
+        : await fetch(`/api/decks/${deckId}/cards`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              card_id: card.id,
+              quantity: 1,
+              section,
+            }),
+          });
+
+      if (!response.ok) {
+        throw new Error(
+          `Add card failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      setSpotlightCard(card);
+      await reloadDeckData();
+    } catch (addError) {
+      console.error(addError);
+      setError(
+        addError instanceof Error ? addError.message : "Could not add card"
+      );
+    } finally {
+      setLoading(false);
     }
-
-    await reloadDeckData();
-    setLoading(false);
   }
 
   async function setDeckCardQuantity(deckCard: DeckCard, quantity: number) {
     setLoading(true);
 
-    if (quantity <= 0) {
-      await fetch(`/api/decks/${deckId}/cards/${deckCard.id}`, {
-        method: "DELETE",
+    try {
+      const response = await fetch(`/api/decks/cards/${deckCard.id}`, {
+        method: quantity <= 0 ? "DELETE" : "PATCH",
+        headers:
+          quantity <= 0
+            ? undefined
+            : {
+                "Content-Type": "application/json",
+              },
+        body:
+          quantity <= 0
+            ? undefined
+            : JSON.stringify({ quantity }),
       });
-    } else {
-      await fetch(`/api/decks/${deckId}/cards/${deckCard.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ quantity }),
-      });
-    }
 
-    await reloadDeckData();
-    setLoading(false);
+      if (!response.ok) {
+        throw new Error(
+          `Deck-card update failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      await reloadDeckData();
+    } catch (updateError) {
+      console.error(updateError);
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Could not update deck card"
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function removeDeckCard(deckCard: DeckCard) {
     setLoading(true);
 
-    await fetch(`/api/decks/${deckId}/cards/${deckCard.id}`, {
-      method: "DELETE",
-    });
+    try {
+      const response = await fetch(`/api/decks/cards/${deckCard.id}`, {
+        method: "DELETE",
+      });
 
-    await reloadDeckData();
-    setLoading(false);
+      if (!response.ok) {
+        throw new Error(
+          `Deck-card deletion failed: ${response.status} ${await response.text()}`
+        );
+      }
+
+      await reloadDeckData();
+    } catch (deleteError) {
+      console.error(deleteError);
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not remove deck card"
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   function resetFilters() {
@@ -583,7 +733,7 @@ export default function DeckEditorPage() {
         ) : (
           <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-8 2xl:grid-cols-10">
             {cards.map((deckCard) => {
-              const card = deckCard.cards;
+              const card = deckCard.card;
               const owned = getOwnedQuantity(card.id);
               const usedHere = getTotalQuantityInCurrentDeck(card.id);
               const usedElsewhere = getQuantityUsedElsewhere(card.id);
@@ -680,7 +830,15 @@ export default function DeckEditorPage() {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950">
         <div className="mx-auto max-w-7xl">
-          <p className="rounded-xl bg-white p-5 shadow-sm">Loading deck...</p>
+          <p
+            className={`rounded-xl border p-5 shadow-sm ${
+              error
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-slate-200 bg-white text-slate-700"
+            }`}
+          >
+            {error || "Loading deck..."}
+          </p>
         </div>
       </main>
     );
@@ -689,6 +847,12 @@ export default function DeckEditorPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-5 text-slate-950">
       <div className="mx-auto max-w-[1800px]">
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
         <header className="mb-5 flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Link
