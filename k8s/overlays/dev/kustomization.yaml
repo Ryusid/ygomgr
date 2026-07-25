@@ -5,11 +5,3 @@ resources:
   - ../../base
   - ingress.yaml
 
-# Clean local image tags for Kubernetes deployment
-images:
-  - name: ygomgr-backend
-    newName: ygomgr-backend
-    newTag: latest
-  - name: ygomgr-frontend
-    newName: ygomgr-frontend
-    newTag: latest
