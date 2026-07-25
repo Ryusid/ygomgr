@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --fetch-retry-mintimeout 20000 --fetch-retry-maxtimeout 120000 --fetch-retries 5
 
 # Stage 2: Builder
 FROM node:20-alpine AS builder
@@ -10,7 +10,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Environment variables for build phase
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 
