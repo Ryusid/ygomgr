@@ -12,7 +12,7 @@ class CardSchema(BaseModel):
     attribute: Optional[str] = None
     archetype: Optional[str] = None
     atk: Optional[int] = None
-    def: Optional[int] = Field(None, alias="def")
+    def_val: Optional[int] = Field(None, alias="def")
     level: Optional[int] = None
     linkval: Optional[int] = None
     scale: Optional[int] = None

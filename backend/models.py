@@ -18,7 +18,7 @@ class Card(Base):
     attribute = Column(String(50), nullable=True, index=True)
     archetype = Column(String(100), nullable=True, index=True)
     atk = Column(Integer, nullable=True, index=True)
-    def = Column(Integer, nullable=True, index=True)
+    def_val = Column("def", Integer, nullable=True, index=True)
     level = Column(Integer, nullable=True, index=True)
     linkval = Column(Integer, nullable=True)
     scale = Column(Integer, nullable=True)

@@ -51,6 +51,7 @@ def import_cards():
             "archetype": card.get("archetype"),
             "atk": card.get("atk"),
             "def": card.get("def"),
+            "def_val": card.get("def"),
             "level": card.get("level"),
             "linkval": card.get("linkval"),
             "scale": card.get("scale"),

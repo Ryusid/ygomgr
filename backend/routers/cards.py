@@ -64,10 +64,10 @@ def search_cards(
         query = query.filter(Card.atk <= maxAtk)
 
     if minDef is not None:
-        query = query.filter(Card.def >= minDef)
+        query = query.filter(Card.def_val >= minDef)
 
     if maxDef is not None:
-        query = query.filter(Card.def <= maxDef)
+        query = query.filter(Card.def_val <= maxDef)
 
     if minLevel is not None:
         query = query.filter(Card.level >= minLevel)
