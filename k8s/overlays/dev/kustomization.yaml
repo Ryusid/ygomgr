@@ -4,4 +4,8 @@ kind: Kustomization
 resources:
   - ../../base
   - ingress.yaml
-
+images:
+  - name: 192.168.0.101:30500/ygomgr-backend
+    newTag: 1.1.0
+  - name: 192.168.0.101:30500/ygomgr-frontend
+    newTag: 1.1.0
