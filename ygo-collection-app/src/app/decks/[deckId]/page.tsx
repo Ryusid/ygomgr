@@ -446,10 +446,10 @@ export default function DeckEditorPage() {
         </div>
       )}
 
-      {/* 3-Column Layout: Preview Spotlight | Deck Contents | Card Search */}
-      <div className="grid grid-cols-1 xl:grid-cols-[300px_1fr_360px] gap-6">
+      {/* 3-Column Layout: Preview Spotlight (Left) | Deck Contents (Middle) | Card Search (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] 2xl:grid-cols-[320px_1fr_380px] gap-5 items-start">
         {/* Left Column: Spotlight Card Preview */}
-        <aside className="sticky top-6">
+        <aside className="lg:sticky lg:top-4 self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto pr-0.5">
           <CardPreview
             card={spotlightCard}
             ownedQuantity={spotlightCard ? getOwnedQuantity(spotlightCard.id) : 0}
@@ -459,15 +459,15 @@ export default function DeckEditorPage() {
           />
         </aside>
 
-        {/* Middle Column: Main / Extra / Side Deck Grids */}
-        <div className="space-y-4">
+        {/* Middle Column: Main / Extra / Side Deck Grids stacked on top of each other */}
+        <div className="space-y-4 min-w-0">
           {renderDeckSection("Main Deck", "main", groupedCards.main)}
           {renderDeckSection("Extra Deck", "extra", groupedCards.extra)}
           {renderDeckSection("Side Deck", "side", groupedCards.side)}
         </div>
 
         {/* Right Column: Card Search & Quick-Add */}
-        <aside className="sticky top-6 space-y-4">
+        <aside className="lg:sticky lg:top-4 self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-4 pr-0.5">
           <SearchPanel
             filters={searchFilters}
             onChange={setSearchFilters}
