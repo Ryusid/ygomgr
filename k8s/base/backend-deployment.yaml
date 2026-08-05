@@ -18,11 +18,14 @@ spec:
     spec:
       containers:
         - name: backend
-          image: 192.168.0.31:30500/ygomgr-backend:1.0.1
+          image: 192.168.0.31:30500/ygomgr-backend:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http
+          envFrom:
+            - secretRef:
+                name: supabase-migration-secret
           env:
             - name: MARIADB_HOST
               valueFrom:

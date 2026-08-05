@@ -3,9 +3,8 @@ kind: Ingress
 metadata:
   name: ygomgr-ingress
   namespace: ygomgr
-  annotations:
-    kubernetes.io/ingress.class: nginx
 spec:
+  ingressClassName: nginx
   rules:
     - host: ygomgr.home.lab
       http:

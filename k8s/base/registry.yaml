@@ -15,6 +15,8 @@ spec:
       labels:
         app: container-registry
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: sid-mac-mini
       containers:
         - name: registry
           image: registry:2
@@ -24,10 +26,26 @@ spec:
           volumeMounts:
             - name: registry-storage
               mountPath: /var/lib/registry
+            - name: registry-tls
+              mountPath: /certs
+              readOnly: true
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: "0.0.0.0:5000"
+
+            - name: REGISTRY_HTTP_TLS_CERTIFICATE
+              value: "/certs/tls.crt"
+
+            - name: REGISTRY_HTTP_TLS_KEY
+              value: "/certs/tls.key"
       volumes:
         - name: registry-storage
           persistentVolumeClaim:
             claimName: registry-pvc
+        - name: registry-tls
+          secret:
+            secretName: container-registry-tls
+
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
