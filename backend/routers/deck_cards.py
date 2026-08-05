@@ -1,6 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import exists
 from backend.database import get_db
 from backend.models import Deck, DeckCard, Card
 from backend.schemas import DeckCardAdd, DeckCardUpdate
@@ -22,12 +23,17 @@ def add_card_to_deck(deck_id: str, payload: DeckCardAdd, db: Session = Depends(g
     if section not in ["main", "extra", "side"]:
         raise HTTPException(status_code=400, detail="Invalid section")
 
-    deck = db.query(Deck).filter(Deck.id == deck_id).first()
-    if not deck:
+    # Use EXISTS for lightweight validation instead of loading full objects
+    deck_exists = db.query(
+        exists().where(Deck.id == deck_id)
+    ).scalar()
+    if not deck_exists:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    card = db.query(Card).filter(Card.id == card_id).first()
-    if not card:
+    card_exists = db.query(
+        exists().where(Card.id == card_id)
+    ).scalar()
+    if not card_exists:
         raise HTTPException(status_code=404, detail="Card not found")
 
     existing = (

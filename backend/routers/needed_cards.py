@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, load_only
 from backend.database import get_db
 from backend.models import Deck, DeckCard, CollectionCard, Card
 from backend.schemas import NeededCardOut
@@ -8,13 +8,24 @@ from backend.schemas import NeededCardOut
 router = APIRouter(prefix="/api/needed-cards", tags=["needed_cards"])
 OWNER_ID = "local"
 
+# Columns to load for Card when joined (excludes heavy raw_json)
+_CARD_LIGHT_COLUMNS = [
+    Card.id, Card.name, Card.type, Card.description, Card.frame_type,
+    Card.race, Card.attribute, Card.archetype,
+    Card.atk, Card.def_val, Card.level, Card.linkval,
+    Card.scale, Card.image_url,
+]
+
 @router.get("", response_model=List[NeededCardOut])
 def get_needed_cards(db: Session = Depends(get_db)):
-    # 1. Fetch deck cards for owner
+    # 1. Fetch deck cards for owner — eager load card and deck in one query
     deck_rows = (
         db.query(DeckCard)
         .join(Deck, DeckCard.deck_id == Deck.id)
-        .join(Card, DeckCard.card_id == Card.id)
+        .options(
+            joinedload(DeckCard.card).load_only(*_CARD_LIGHT_COLUMNS),
+            joinedload(DeckCard.deck),
+        )
         .filter(Deck.owner_id == OWNER_ID)
         .all()
     )

@@ -2,27 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent } from "react";
+import { useEffect, useMemo, useState, MouseEvent } from "react";
+import CardImage from "@/components/CardImage";
+import CardPreview, { Card } from "@/components/CardPreview";
+import SearchPanel, { FilterState } from "@/components/SearchPanel";
 
 type Section = "main" | "extra" | "side";
-
-type Card = {
-  id: number;
-  name: string;
-  type: string | null;
-  description: string | null;
-  frame_type: string | null;
-  race: string | null;
-  attribute: string | null;
-  archetype: string | null;
-  atk: number | null;
-  def: number | null;
-  level: number | null;
-  linkval: number | null;
-  scale: number | null;
-  image_url: string | null;
-};
 
 type DeckUsageEntry = {
   card_id: number;
@@ -56,157 +41,50 @@ type CollectionItem = {
 
 function isCard(value: unknown): value is Card {
   if (!value || typeof value !== "object") return false;
-
   const card = value as Partial<Card>;
   return typeof card.id === "number" && typeof card.name === "string";
 }
 
 function isDeckCard(value: unknown): value is DeckCard {
   if (!value || typeof value !== "object") return false;
-
-  const deckCard = value as Partial<DeckCard>;
+  const dc = value as Partial<DeckCard>;
   return (
-    typeof deckCard.id === "string" &&
-    typeof deckCard.quantity === "number" &&
-    (deckCard.section === "main" ||
-      deckCard.section === "extra" ||
-      deckCard.section === "side") &&
-    isCard(deckCard.card)
+    typeof dc.id === "string" &&
+    typeof dc.quantity === "number" &&
+    (dc.section === "main" || dc.section === "extra" || dc.section === "side") &&
+    isCard(dc.card)
   );
 }
 
 function isCollectionItem(value: unknown): value is CollectionItem {
   if (!value || typeof value !== "object") return false;
-
   const item = value as Partial<CollectionItem>;
-  return (
-    typeof item.card_id === "number" &&
-    typeof item.quantity_owned === "number" &&
-    isCard(item.card)
-  );
+  return typeof item.card_id === "number" && typeof item.quantity_owned === "number" && isCard(item.card);
 }
 
 function isDeckUsageEntry(value: unknown): value is DeckUsageEntry {
   if (!value || typeof value !== "object") return false;
-
   const entry = value as Partial<DeckUsageEntry>;
-  return (
-    typeof entry.card_id === "number" &&
-    typeof entry.quantity_used_elsewhere === "number" &&
-    Array.isArray(entry.decks)
-  );
+  return typeof entry.card_id === "number" && typeof entry.quantity_used_elsewhere === "number";
 }
 
-const CARD_TYPES = [
-  "Effect Monster",
-  "Normal Monster",
-  "Ritual Monster",
-  "Fusion Monster",
-  "Synchro Monster",
-  "XYZ Monster",
-  "Pendulum Effect Monster",
-  "Link Monster",
-  "Spell Card",
-  "Trap Card",
-];
-
-const RACES_AND_SUBTYPES = [
-  "Dragon",
-  "Spellcaster",
-  "Warrior",
-  "Machine",
-  "Fiend",
-  "Fairy",
-  "Zombie",
-  "Beast",
-  "Beast-Warrior",
-  "Winged Beast",
-  "Aqua",
-  "Pyro",
-  "Thunder",
-  "Rock",
-  "Plant",
-  "Insect",
-  "Fish",
-  "Sea Serpent",
-  "Reptile",
-  "Psychic",
-  "Dinosaur",
-  "Cyberse",
-  "Wyrm",
-  "Divine-Beast",
-  "Field",
-  "Equip",
-  "Quick-Play",
-  "Continuous",
-  "Ritual",
-  "Counter",
-  "Normal",
-];
-
-const ATTRIBUTES = ["DARK", "LIGHT", "EARTH", "WATER", "FIRE", "WIND", "DIVINE"];
-
-function CardBadges({ card }: { card: Card }) {
-  return (
-    <div className="mt-2 flex flex-wrap gap-1">
-      {card.frame_type && (
-        <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[11px] font-bold text-purple-700">
-          {card.frame_type}
-        </span>
-      )}
-
-      {card.type && (
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">
-          {card.type}
-        </span>
-      )}
-
-      {card.race && (
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">
-          {card.race}
-        </span>
-      )}
-
-      {card.attribute && (
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-700">
-          {card.attribute}
-        </span>
-      )}
-
-      {card.archetype && (
-        <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-bold text-blue-700">
-          {card.archetype}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function CardStats({ card }: { card: Card }) {
-  const hasStats =
-    card.atk !== null ||
-    card.def !== null ||
-    card.level !== null ||
-    card.linkval !== null ||
-    card.scale !== null;
-
-  if (!hasStats) return null;
-
-  return (
-    <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
-      {card.atk !== null && <span>ATK {card.atk}</span>}
-      {card.def !== null && <span>DEF {card.def}</span>}
-      {card.level !== null && <span>Level {card.level}</span>}
-      {card.linkval !== null && <span>Link {card.linkval}</span>}
-      {card.scale !== null && <span>Scale {card.scale}</span>}
-    </div>
-  );
-}
+const DEFAULT_FILTERS: FilterState = {
+  query: "",
+  type: "all",
+  race: "all",
+  attribute: "all",
+  archetype: "",
+  minAtk: "",
+  maxAtk: "",
+  minDef: "",
+  maxDef: "",
+  minLevel: "",
+  maxLevel: "",
+};
 
 function getAutoSection(card: Card): Section {
   const frameType = card.frame_type?.toLowerCase() ?? "";
   const type = card.type?.toLowerCase() ?? "";
-
   const value = `${frameType} ${type}`;
 
   if (
@@ -230,217 +108,123 @@ export default function DeckEditorPage() {
   const [collection, setCollection] = useState<CollectionItem[]>([]);
   const [deckUsage, setDeckUsage] = useState<DeckUsageEntry[]>([]);
   const [spotlightCard, setSpotlightCard] = useState<Card | null>(null);
-
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Card[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
-
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [raceFilter, setRaceFilter] = useState("all");
-  const [attributeFilter, setAttributeFilter] = useState("all");
-  const [archetypeFilter, setArchetypeFilter] = useState("");
-  const [minAtk, setMinAtk] = useState("");
-  const [maxAtk, setMaxAtk] = useState("");
-  const [minDef, setMinDef] = useState("");
-  const [maxDef, setMaxDef] = useState("");
-  const [minLevel, setMinLevel] = useState("");
-  const [maxLevel, setMaxLevel] = useState("");
-
+  const [searchFilters, setSearchFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [searchResults, setSearchResults] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadDeck() {
-    const response = await fetch(`/api/decks/${deckId}`, { cache: "no-store" });
-
-    if (!response.ok) {
-      throw new Error(
-        `Deck request failed: ${response.status} ${await response.text()}`
-      );
-    }
-
-    const data = await response.json();
-    const validDeckCards = Array.isArray(data.deck_cards)
-      ? data.deck_cards.filter(isDeckCard)
-      : [];
-
-    if (Array.isArray(data.deck_cards) && validDeckCards.length !== data.deck_cards.length) {
-      console.warn(
-        "Ignored malformed deck cards:",
-        data.deck_cards.filter((item: unknown) => !isDeckCard(item))
-      );
-    }
-
-    const normalizedDeck: Deck = {
-      id: String(data.id),
-      name: String(data.name),
-      created_at: String(data.created_at ?? ""),
-      deck_cards: validDeckCards,
-    };
-
-    setDeck(normalizedDeck);
-    setDeckName(normalizedDeck.name);
-  }
-
-  async function loadCollection() {
-    const response = await fetch("/api/collection", { cache: "no-store" });
-
-    if (!response.ok) {
-      throw new Error(
-        `Collection request failed: ${response.status} ${await response.text()}`
-      );
-    }
-
-    const data: unknown = await response.json();
-    setCollection(Array.isArray(data) ? data.filter(isCollectionItem) : []);
-  }
-
-  async function loadDeckUsage() {
+  async function loadDeckData() {
     try {
-      const response = await fetch(
-        `/api/deck-usage?excludeDeckId=${encodeURIComponent(deckId)}`
-      );
+      // 1. Load Deck Detail
+      const deckRes = await fetch(`/api/decks/${deckId}`, { cache: "no-store" });
+      if (!deckRes.ok) throw new Error("Failed to load deck");
+      const deckData = await deckRes.json();
+      const validDeckCards = Array.isArray(deckData.deck_cards)
+        ? deckData.deck_cards.filter(isDeckCard)
+        : [];
+      setDeck({
+        id: String(deckData.id),
+        name: String(deckData.name),
+        created_at: String(deckData.created_at ?? ""),
+        deck_cards: validDeckCards,
+      });
+      setDeckName(String(deckData.name));
 
-      if (!response.ok) {
-        throw new Error(
-          `Deck usage request failed: ${response.status} ${await response.text()}`
-        );
+      // 2. Load Collection
+      const colRes = await fetch("/api/collection", { cache: "no-store" });
+      if (colRes.ok) {
+        const colData = await colRes.json();
+        setCollection(Array.isArray(colData) ? colData.filter(isCollectionItem) : []);
       }
 
-      const data: unknown = await response.json();
-      setDeckUsage(Array.isArray(data) ? data.filter(isDeckUsageEntry) : []);
-    } catch {
-      setDeckUsage([]);
-    }
-  }
+      // 3. Load Deck Usage
+      const usageRes = await fetch(`/api/deck-usage?excludeDeckId=${encodeURIComponent(deckId)}`);
+      if (usageRes.ok) {
+        const usageData = await usageRes.json();
+        setDeckUsage(Array.isArray(usageData) ? usageData.filter(isDeckUsageEntry) : []);
+      }
 
-  async function reloadDeckData() {
-    try {
-      await Promise.all([loadDeck(), loadCollection(), loadDeckUsage()]);
       setError("");
-    } catch (reloadError) {
-      console.error(reloadError);
-      setError(
-        reloadError instanceof Error
-          ? reloadError.message
-          : "Could not load deck"
-      );
+    } catch (err) {
+      console.error(err);
+      setError("Could not load deck details");
     }
   }
 
   useEffect(() => {
-    reloadDeckData();
+    loadDeckData();
   }, [deckId]);
 
+  // Card Search Debounce
   useEffect(() => {
     const timeout = setTimeout(async () => {
-      const params = new URLSearchParams();
-      const trimmed = query.trim();
+      const p = new URLSearchParams();
+      const q = searchFilters.query.trim();
 
-      if (trimmed.length >= 2) {
-        params.set("q", trimmed);
-      }
+      if (q.length >= 2) p.set("q", q);
+      if (searchFilters.type !== "all") p.set("type", searchFilters.type);
+      if (searchFilters.race !== "all") p.set("race", searchFilters.race);
+      if (searchFilters.attribute !== "all") p.set("attribute", searchFilters.attribute);
+      if (searchFilters.archetype.trim()) p.set("archetype", searchFilters.archetype.trim());
+      if (searchFilters.minAtk) p.set("minAtk", searchFilters.minAtk);
+      if (searchFilters.maxAtk) p.set("maxAtk", searchFilters.maxAtk);
+      if (searchFilters.minDef) p.set("minDef", searchFilters.minDef);
+      if (searchFilters.maxDef) p.set("maxDef", searchFilters.maxDef);
+      if (searchFilters.minLevel) p.set("minLevel", searchFilters.minLevel);
+      if (searchFilters.maxLevel) p.set("maxLevel", searchFilters.maxLevel);
 
-      if (typeFilter !== "all") params.set("type", typeFilter);
-      if (raceFilter !== "all") params.set("race", raceFilter);
-      if (attributeFilter !== "all") params.set("attribute", attributeFilter);
-      if (archetypeFilter.trim()) params.set("archetype", archetypeFilter.trim());
-
-      if (minAtk) params.set("minAtk", minAtk);
-      if (maxAtk) params.set("maxAtk", maxAtk);
-      if (minDef) params.set("minDef", minDef);
-      if (maxDef) params.set("maxDef", maxDef);
-      if (minLevel) params.set("minLevel", minLevel);
-      if (maxLevel) params.set("maxLevel", maxLevel);
-
-      if (params.toString() === "") {
-        setSuggestions([]);
+      if (p.toString() === "") {
+        setSearchResults([]);
         return;
       }
 
       try {
-        const response = await fetch(`/api/cards/search?${params.toString()}`);
-
-        if (!response.ok) {
-          throw new Error(
-            `Card search failed: ${response.status} ${await response.text()}`
-          );
+        const res = await fetch(`/api/cards/search?${p.toString()}`);
+        if (res.ok) {
+          const data: unknown = await res.json();
+          setSearchResults(Array.isArray(data) ? data.filter(isCard) : []);
         }
-
-        const data: unknown = await response.json();
-        setSuggestions(Array.isArray(data) ? data.filter(isCard) : []);
-      } catch (searchError) {
-        console.error(searchError);
-        setSuggestions([]);
+      } catch (err) {
+        console.error(err);
+        setSearchResults([]);
       }
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [
-    query,
-    typeFilter,
-    raceFilter,
-    attributeFilter,
-    archetypeFilter,
-    minAtk,
-    maxAtk,
-    minDef,
-    maxDef,
-    minLevel,
-    maxLevel,
-  ]);
+  }, [searchFilters]);
 
   const deckCards = deck?.deck_cards ?? [];
 
   const groupedCards = useMemo(() => {
-    const sortByName = (cards: DeckCard[]) =>
-      [...cards]
-        .filter((item) => item?.card)
-        .sort((a, b) => a.card.name.localeCompare(b.card.name));
+    const sortCards = (list: DeckCard[]) =>
+      [...list].filter((item) => item?.card).sort((a, b) => a.card.name.localeCompare(b.card.name));
 
     return {
-      main: sortByName(deckCards.filter((item) => item.section === "main")),
-      extra: sortByName(deckCards.filter((item) => item.section === "extra")),
-      side: sortByName(deckCards.filter((item) => item.section === "side")),
+      main: sortCards(deckCards.filter((item) => item.section === "main")),
+      extra: sortCards(deckCards.filter((item) => item.section === "extra")),
+      side: sortCards(deckCards.filter((item) => item.section === "side")),
     };
   }, [deckCards]);
 
   function getOwnedQuantity(cardId: number) {
-    const item = collection.find((entry) => entry.card_id === cardId);
-    return item?.quantity_owned ?? 0;
+    return collection.find((item) => item.card_id === cardId)?.quantity_owned ?? 0;
   }
 
-  function getTotalQuantityInCurrentDeck(cardId: number) {
+  function getQuantityInDeck(cardId: number) {
     return deckCards
       .filter((item) => item.card.id === cardId)
       .reduce((total, item) => total + item.quantity, 0);
   }
 
-  function getUsageElsewhere(cardId: number) {
-    return deckUsage.find((entry) => entry.card_id === cardId) ?? null;
+  function getUsedElsewhere(cardId: number) {
+    return deckUsage.find((item) => item.card_id === cardId)?.quantity_used_elsewhere ?? 0;
   }
 
-  function getQuantityUsedElsewhere(cardId: number) {
-    return getUsageElsewhere(cardId)?.quantity_used_elsewhere ?? 0;
-  }
-
-  function getOtherDecksText(cardId: number) {
-    const usage = getUsageElsewhere(cardId);
-
-    if (!usage || usage.decks.length === 0) {
-      return "";
-    }
-
-    return usage.decks
-      .map((deck) => `${deck.deck_name} x${deck.quantity}`)
-      .join(", ");
-  }
-
-  function getGlobalMissing(cardId: number) {
+  function getMissingQuantity(cardId: number) {
     const owned = getOwnedQuantity(cardId);
-    const usedHere = getTotalQuantityInCurrentDeck(cardId);
-    const usedElsewhere = getQuantityUsedElsewhere(cardId);
-
-    return Math.max(0, usedHere + usedElsewhere - owned);
+    const inDeck = getQuantityInDeck(cardId);
+    const elsewhere = getUsedElsewhere(cardId);
+    return Math.max(0, inDeck + elsewhere - owned);
   }
 
   function countSection(section: Section) {
@@ -449,41 +233,8 @@ export default function DeckEditorPage() {
       .reduce((total, item) => total + item.quantity, 0);
   }
 
-  async function saveDeckName() {
-    const name = deckName.trim();
-    if (!name) return;
-
-    setLoading(true);
-
-    try {
-      const response = await fetch(`/api/decks/${deckId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name }),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Rename failed: ${response.status} ${await response.text()}`
-        );
-      }
-
-      await reloadDeckData();
-    } catch (renameError) {
-      console.error(renameError);
-      setError(
-        renameError instanceof Error ? renameError.message : "Could not rename deck"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function addCardToDeck(card: Card, section: Section) {
     if (!deck) return;
-
     setLoading(true);
 
     try {
@@ -491,330 +242,141 @@ export default function DeckEditorPage() {
         (item) => item.card.id === card.id && item.section === section
       );
 
-      const response = existing
+      const res = existing
         ? await fetch(`/api/decks/cards/${existing.id}`, {
             method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              quantity: existing.quantity + 1,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ quantity: existing.quantity + 1 }),
           })
         : await fetch(`/api/decks/${deckId}/cards`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              card_id: card.id,
-              quantity: 1,
-              section,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ card_id: card.id, quantity: 1, section }),
           });
 
-      if (!response.ok) {
-        throw new Error(
-          `Add card failed: ${response.status} ${await response.text()}`
-        );
-      }
+      if (!res.ok) throw new Error("Failed to add card");
 
       setSpotlightCard(card);
-      await reloadDeckData();
-    } catch (addError) {
-      console.error(addError);
-      setError(
-        addError instanceof Error ? addError.message : "Could not add card"
-      );
+      await loadDeckData();
+    } catch (err) {
+      console.error(err);
+      setError("Could not add card to deck");
     } finally {
       setLoading(false);
     }
   }
 
-  async function setDeckCardQuantity(deckCard: DeckCard, quantity: number) {
+  async function updateDeckCardQuantity(deckCard: DeckCard, quantity: number) {
     setLoading(true);
-
     try {
-      const response = await fetch(`/api/decks/cards/${deckCard.id}`, {
+      const res = await fetch(`/api/decks/cards/${deckCard.id}`, {
         method: quantity <= 0 ? "DELETE" : "PATCH",
-        headers:
-          quantity <= 0
-            ? undefined
-            : {
-                "Content-Type": "application/json",
-              },
-        body:
-          quantity <= 0
-            ? undefined
-            : JSON.stringify({ quantity }),
+        headers: quantity <= 0 ? undefined : { "Content-Type": "application/json" },
+        body: quantity <= 0 ? undefined : JSON.stringify({ quantity }),
       });
 
-      if (!response.ok) {
-        throw new Error(
-          `Deck-card update failed: ${response.status} ${await response.text()}`
-        );
-      }
-
-      await reloadDeckData();
-    } catch (updateError) {
-      console.error(updateError);
-      setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Could not update deck card"
-      );
+      if (!res.ok) throw new Error("Failed to update card quantity");
+      await loadDeckData();
+    } catch (err) {
+      console.error(err);
+      setError("Could not update card quantity");
     } finally {
       setLoading(false);
     }
   }
 
-  async function removeDeckCard(deckCard: DeckCard) {
+  async function renameDeck() {
+    const name = deckName.trim();
+    if (!name) return;
     setLoading(true);
-
     try {
-      const response = await fetch(`/api/decks/cards/${deckCard.id}`, {
-        method: "DELETE",
+      const res = await fetch(`/api/decks/${deckId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
       });
-
-      if (!response.ok) {
-        throw new Error(
-          `Deck-card deletion failed: ${response.status} ${await response.text()}`
-        );
-      }
-
-      await reloadDeckData();
-    } catch (deleteError) {
-      console.error(deleteError);
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Could not remove deck card"
-      );
+      if (!res.ok) throw new Error("Rename failed");
+      await loadDeckData();
+    } catch (err) {
+      console.error(err);
+      setError("Failed to rename deck");
     } finally {
       setLoading(false);
     }
   }
 
-  function resetFilters() {
-    setQuery("");
-    setTypeFilter("all");
-    setRaceFilter("all");
-    setAttributeFilter("all");
-    setArchetypeFilter("");
-    setMinAtk("");
-    setMaxAtk("");
-    setMinDef("");
-    setMaxDef("");
-    setMinLevel("");
-    setMaxLevel("");
-    setSuggestions([]);
-  }
-
-  function handleSearchCardLeftClick(card: Card) {
-    setSpotlightCard(card);
-  }
-
-  function handleSearchCardRightClick(
-    event: MouseEvent<HTMLDivElement>,
-    card: Card
-  ) {
-    event.preventDefault();
-
-    const section: Section = event.altKey ? "side" : getAutoSection(card);
-
+  function handleRightClickCard(e: MouseEvent, card: Card) {
+    e.preventDefault();
+    const section: Section = e.altKey ? "side" : getAutoSection(card);
     addCardToDeck(card, section);
   }
 
-  function renderSpotlight() {
-    const card = spotlightCard;
-
-    if (!card) {
-      return (
-        <aside className="rounded-2xl border bg-white p-4 shadow-sm xl:sticky xl:top-5">
-          <h2 className="text-xl font-black">Card Preview</h2>
-          <p className="mt-3 text-sm text-slate-600">
-            Left click a card to preview it here. Right click a search result to
-            add it automatically.
-          </p>
-
-          <div className="mt-4 rounded-xl bg-slate-100 p-4 text-sm font-semibold text-slate-500">
-            Right click = add to Main/Extra automatically.
-            <br />
-            Alt + right click = add to Side.
-          </div>
-        </aside>
-      );
-    }
-
-    const owned = getOwnedQuantity(card.id);
-    const usedHere = getTotalQuantityInCurrentDeck(card.id);
-    const usedElsewhere = getQuantityUsedElsewhere(card.id);
-    const missing = getGlobalMissing(card.id);
-    const otherDecksText = getOtherDecksText(card.id);
-
+  function renderDeckSection(title: string, section: Section, cards: DeckCard[]) {
+    const count = countSection(section);
     return (
-      <aside className="rounded-2xl border bg-white p-4 shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
-        <h2 className="mb-3 text-xl font-black">Card Preview</h2>
-
-        {card.image_url ? (
-          <img
-            src={card.image_url}
-            alt={card.name}
-            className="mx-auto w-full max-w-[260px] rounded-xl object-cover shadow"
-          />
-        ) : (
-          <div className="mx-auto aspect-[3/4.3] w-full max-w-[260px] rounded-xl bg-slate-200" />
-        )}
-
-        <div className="mt-4">
-          <h3 className="text-2xl font-black leading-tight">{card.name}</h3>
-          <CardBadges card={card} />
-          <CardStats card={card} />
-
-          <div className="mt-4 grid grid-cols-2 gap-2 text-sm font-black">
-            <div className="rounded-xl bg-blue-50 p-3 text-blue-700">
-              Owned x{owned}
-            </div>
-
-            <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
-              This deck x{usedHere}
-            </div>
-
-            <div className="rounded-xl bg-orange-50 p-3 text-orange-700">
-              Other decks x{usedElsewhere}
-            </div>
-
-            <div
-              className={`rounded-xl p-3 ${
-                missing > 0
-                  ? "bg-red-50 text-red-700"
-                  : "bg-green-50 text-green-700"
-              }`}
-            >
-              Missing x{missing}
-            </div>
+      <section className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-200">
+              {title}
+            </h2>
           </div>
-
-          {otherDecksText && (
-            <p className="mt-3 rounded-xl bg-orange-50 p-3 text-sm font-semibold text-orange-700">
-              Used in: {otherDecksText}
-            </p>
-          )}
-
-          {card.description && (
-            <p className="mt-4 whitespace-pre-line rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-              {card.description}
-            </p>
-          )}
-        </div>
-      </aside>
-    );
-  }
-
-  function renderCompactSection(title: string, section: Section, cards: DeckCard[]) {
-    const total = countSection(section);
-
-    return (
-      <section className="rounded-2xl border bg-white p-3 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-black">{title}</h2>
-          </div>
-
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
-            {total}
+          <span className="rounded-md bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 text-xs font-black text-amber-300">
+            {count} / {section === "main" ? "60" : "15"}
           </span>
         </div>
 
         {cards.length === 0 ? (
-          <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-500">
-            Empty.
+          <div className="rounded-xl border border-dashed border-slate-800 p-6 text-center text-xs text-slate-500">
+            No cards in {title}. Search cards on the right and right-click to add.
           </div>
         ) : (
-          <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-8 2xl:grid-cols-10">
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
             {cards.map((deckCard) => {
               const card = deckCard.card;
-              const owned = getOwnedQuantity(card.id);
-              const usedHere = getTotalQuantityInCurrentDeck(card.id);
-              const usedElsewhere = getQuantityUsedElsewhere(card.id);
-              const missing = getGlobalMissing(card.id);
-              const otherDecksText = getOtherDecksText(card.id);
-
+              const missing = getMissingQuantity(card.id);
               return (
                 <div
                   key={deckCard.id}
-                  className={`group relative cursor-pointer rounded-lg border bg-slate-50 p-1 ${
-                    missing > 0 ? "border-red-400" : "border-slate-200"
-                  }`}
-                  title={`${card.name} | This deck: ${usedHere} | Other decks: ${usedElsewhere} | Owned: ${owned} | Missing globally: ${missing}${
-                    otherDecksText ? ` | Used in: ${otherDecksText}` : ""
+                  className={`group relative cursor-pointer flex flex-col items-center p-1 rounded-lg border transition ${
+                    spotlightCard?.id === card.id
+                      ? "border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10"
+                      : missing > 0
+                      ? "border-rose-500/60 bg-rose-950/20"
+                      : "border-slate-800 bg-slate-900/40 hover:border-slate-700"
                   }`}
                   onClick={() => setSpotlightCard(card)}
                 >
-                  <div className="relative">
-                    {card.image_url ? (
-                      <img
-                        src={card.image_url}
-                        alt={card.name}
-                        className="aspect-[3/4.3] w-full rounded object-cover"
-                      />
-                    ) : (
-                      <div className="aspect-[3/4.3] w-full rounded bg-slate-200" />
-                    )}
+                  <CardImage
+                    src={card.image_url}
+                    alt={card.name}
+                    frameType={card.frame_type}
+                    quantity={deckCard.quantity}
+                    missing={missing}
+                    size="full"
+                  />
 
-                    <div className="absolute right-1 top-1 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-black text-white">
-                      x{deckCard.quantity}
-                    </div>
-
-                    {missing > 0 && (
-                      <div className="absolute bottom-1 left-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white">
-                        -{missing}
-                      </div>
-                    )}
-
-                    {usedElsewhere > 0 && (
-                      <div className="absolute bottom-1 right-1 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-black text-white">
-                        O{usedElsewhere}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-1 truncate text-[10px] font-bold text-slate-800">
-                    {card.name}
-                  </div>
-
-                  <div className="mt-1 grid grid-cols-3 gap-1">
+                  {/* Quick Increment/Decrement Overlay on Hover */}
+                  <div className="mt-1 flex items-center justify-center gap-1 w-full">
                     <button
-                      className="rounded bg-white px-1 py-0.5 text-[11px] font-black shadow hover:bg-slate-100"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDeckCardQuantity(deckCard, deckCard.quantity - 1);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateDeckCardQuantity(deckCard, deckCard.quantity - 1);
                       }}
                       disabled={loading}
+                      className="h-5 w-5 rounded bg-slate-800 text-[10px] font-black text-slate-300 hover:bg-slate-700 border border-slate-700"
                     >
                       -
                     </button>
-
                     <button
-                      className="rounded bg-white px-1 py-0.5 text-[11px] font-black shadow hover:bg-slate-100"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDeckCardQuantity(deckCard, deckCard.quantity + 1);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateDeckCardQuantity(deckCard, deckCard.quantity + 1);
                       }}
                       disabled={loading}
+                      className="h-5 w-5 rounded bg-slate-800 text-[10px] font-black text-slate-300 hover:bg-slate-700 border border-slate-700"
                     >
                       +
-                    </button>
-
-                    <button
-                      className="rounded bg-red-50 px-1 py-0.5 text-[11px] font-black text-red-600 shadow hover:bg-red-100"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeDeckCard(deckCard);
-                      }}
-                      disabled={loading}
-                    >
-                      ×
                     </button>
                   </div>
                 </div>
@@ -828,287 +390,138 @@ export default function DeckEditorPage() {
 
   if (!deck) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950">
-        <div className="mx-auto max-w-7xl">
-          <p
-            className={`rounded-xl border p-5 shadow-sm ${
-              error
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-slate-200 bg-white text-slate-700"
-            }`}
-          >
-            {error || "Loading deck..."}
-          </p>
-        </div>
+      <main className="p-6 text-center text-slate-400">
+        {error || "Loading Master Deck Builder..."}
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-5 text-slate-950">
-      <div className="mx-auto max-w-[1800px]">
-        {error && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-            {error}
+    <main className="p-4 lg:p-6 max-w-[1800px] mx-auto space-y-6">
+      {/* Deck Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-slate-800/80 bg-gradient-to-r from-[#0f172a] via-[#131d35] to-[#0f172a] p-5 shadow-2xl backdrop-blur-md">
+        <div>
+          <Link
+            href="/decks"
+            className="text-xs font-bold text-amber-400 hover:underline mb-1 inline-block"
+          >
+            ← Back to All Decks
+          </Link>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-black text-slate-100">{deck.name}</h1>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+              <span className="rounded bg-slate-800 px-2 py-0.5 border border-slate-700 text-slate-300">
+                Main: {countSection("main")}
+              </span>
+              <span className="rounded bg-slate-800 px-2 py-0.5 border border-slate-700 text-slate-300">
+                Extra: {countSection("extra")}
+              </span>
+              <span className="rounded bg-slate-800 px-2 py-0.5 border border-slate-700 text-slate-300">
+                Side: {countSection("side")}
+              </span>
+            </div>
           </div>
-        )}
+        </div>
 
-        <header className="mb-5 flex flex-col gap-4 rounded-2xl border bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <Link
-              href="/decks"
-              className="mb-2 inline-block text-sm font-bold text-blue-700 hover:underline"
-            >
-              ← Back to decks
-            </Link>
+        {/* Rename deck control */}
+        <div className="flex items-center gap-2">
+          <input
+            className="rounded-xl border border-slate-700/80 bg-slate-950 px-3.5 py-2 text-xs font-medium text-slate-100 outline-none focus:border-amber-500"
+            value={deckName}
+            onChange={(e) => setDeckName(e.target.value)}
+          />
+          <button
+            onClick={renameDeck}
+            disabled={loading}
+            className="rounded-xl bg-slate-800 border border-slate-700 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-slate-700 transition"
+          >
+            Rename
+          </button>
+        </div>
+      </div>
 
-            <h1 className="text-2xl font-black tracking-tight">{deck.name}</h1>
+      {error && (
+        <div className="rounded-xl border border-rose-500/50 bg-rose-950/40 p-4 text-xs font-bold text-rose-300">
+          ⚠️ {error}
+        </div>
+      )}
 
-            <p className="mt-1 text-sm font-semibold text-slate-600">
-              Main {countSection("main")} / Extra {countSection("extra")} / Side{" "}
-              {countSection("side")}
-            </p>
-          </div>
+      {/* 3-Column Layout: Preview Spotlight | Deck Contents | Card Search */}
+      <div className="grid grid-cols-1 xl:grid-cols-[300px_1fr_360px] gap-6">
+        {/* Left Column: Spotlight Card Preview */}
+        <aside className="sticky top-6">
+          <CardPreview
+            card={spotlightCard}
+            ownedQuantity={spotlightCard ? getOwnedQuantity(spotlightCard.id) : 0}
+            deckQuantity={spotlightCard ? getQuantityInDeck(spotlightCard.id) : 0}
+            usedElsewhereQuantity={spotlightCard ? getUsedElsewhere(spotlightCard.id) : 0}
+            missingQuantity={spotlightCard ? getMissingQuantity(spotlightCard.id) : 0}
+          />
+        </aside>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              className="rounded-xl border border-slate-300 px-4 py-2 outline-none ring-blue-500 focus:ring-2"
-              value={deckName}
-              onChange={(event) => setDeckName(event.target.value)}
-            />
+        {/* Middle Column: Main / Extra / Side Deck Grids */}
+        <div className="space-y-4">
+          {renderDeckSection("Main Deck", "main", groupedCards.main)}
+          {renderDeckSection("Extra Deck", "extra", groupedCards.extra)}
+          {renderDeckSection("Side Deck", "side", groupedCards.side)}
+        </div>
 
-            <button
-              className="rounded-xl bg-slate-900 px-4 py-2 font-bold text-white hover:bg-slate-700 disabled:opacity-50"
-              onClick={saveDeckName}
-              disabled={loading}
-            >
-              Rename
-            </button>
-          </div>
-        </header>
+        {/* Right Column: Card Search & Quick-Add */}
+        <aside className="sticky top-6 space-y-4">
+          <SearchPanel
+            filters={searchFilters}
+            onChange={setSearchFilters}
+            onReset={() => setSearchFilters(DEFAULT_FILTERS)}
+            placeholder="Search cards to add..."
+            compact
+          />
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[300px_1fr_420px]">
-          {renderSpotlight()}
-
-          <div className="space-y-3">
-            {renderCompactSection("Main Deck", "main", groupedCards.main)}
-            {renderCompactSection("Extra Deck", "extra", groupedCards.extra)}
-            {renderCompactSection("Side Deck", "side", groupedCards.side)}
-          </div>
-
-          <aside className="rounded-2xl border bg-white p-4 shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-y-auto">
-            <div className="mb-4">
-              <h2 className="text-xl font-black">Card Search</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Left click = preview. Right click = auto-add. Alt + right click =
-                side deck.
-              </p>
+          {/* Search Results Grid */}
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 backdrop-blur-md space-y-3">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Card Search ({searchResults.length})</span>
+              <span className="text-[10px] text-amber-400">Right-click = Add</span>
             </div>
 
-            <input
-              className="mb-3 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none ring-blue-500 focus:ring-2"
-              placeholder="Search card name..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-
-            <button
-              className="mb-3 w-full rounded-xl border border-slate-300 px-4 py-2 font-bold hover:bg-slate-100"
-              onClick={() => setShowFilters((value) => !value)}
-            >
-              {showFilters ? "Hide filters" : "Show filters"}
-            </button>
-
-            {showFilters && (
-              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="grid grid-cols-1 gap-2">
-                  <select
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    value={typeFilter}
-                    onChange={(event) => setTypeFilter(event.target.value)}
-                  >
-                    <option value="all">All card types</option>
-                    {CARD_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    value={raceFilter}
-                    onChange={(event) => setRaceFilter(event.target.value)}
-                  >
-                    <option value="all">All races/subtypes</option>
-                    {RACES_AND_SUBTYPES.map((race) => (
-                      <option key={race} value={race}>
-                        {race}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    value={attributeFilter}
-                    onChange={(event) => setAttributeFilter(event.target.value)}
-                  >
-                    <option value="all">All attributes</option>
-                    {ATTRIBUTES.map((attribute) => (
-                      <option key={attribute} value={attribute}>
-                        {attribute}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Archetype, e.g. D/D"
-                    value={archetypeFilter}
-                    onChange={(event) => setArchetypeFilter(event.target.value)}
-                  />
-                </div>
-
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Min ATK"
-                    value={minAtk}
-                    onChange={(event) => setMinAtk(event.target.value)}
-                  />
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Max ATK"
-                    value={maxAtk}
-                    onChange={(event) => setMaxAtk(event.target.value)}
-                  />
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Min DEF"
-                    value={minDef}
-                    onChange={(event) => setMinDef(event.target.value)}
-                  />
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Max DEF"
-                    value={maxDef}
-                    onChange={(event) => setMaxDef(event.target.value)}
-                  />
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Min Level"
-                    value={minLevel}
-                    onChange={(event) => setMinLevel(event.target.value)}
-                  />
-
-                  <input
-                    className="rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Max Level"
-                    value={maxLevel}
-                    onChange={(event) => setMaxLevel(event.target.value)}
-                  />
-                </div>
-
-                <button
-                  className="mt-3 w-full rounded-xl border border-slate-300 px-4 py-2 font-bold hover:bg-slate-100"
-                  onClick={resetFilters}
-                >
-                  Reset filters
-                </button>
+            {searchResults.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                Type a card name or adjust search filters to display cards.
               </div>
-            )}
-
-            <div className="space-y-2">
-              {suggestions.length === 0 ? (
-                <p className="rounded-xl bg-slate-100 p-4 text-sm text-slate-500">
-                  Search by name or open filters to find cards.
-                </p>
-              ) : (
-                suggestions.map((card) => {
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-[calc(100vh-250px)] overflow-y-auto pr-1">
+                {searchResults.map((card) => {
                   const owned = getOwnedQuantity(card.id);
-                  const alreadyInThisDeck = getTotalQuantityInCurrentDeck(card.id);
-                  const usedElsewhere = getQuantityUsedElsewhere(card.id);
-                  const autoSection = getAutoSection(card);
-                  const neededAfterAdd = alreadyInThisDeck + usedElsewhere + 1;
-                  const missingAfterAdd = Math.max(0, neededAfterAdd - owned);
-                  const otherDecksText = getOtherDecksText(card.id);
-
+                  const inDeck = getQuantityInDeck(card.id);
+                  const missing = getMissingQuantity(card.id);
                   return (
                     <div
                       key={card.id}
-                      className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-2 hover:bg-slate-50"
-                      onClick={() => handleSearchCardLeftClick(card)}
-                      onContextMenu={(event) =>
-                        handleSearchCardRightClick(event, card)
-                      }
-                      title="Left click: preview. Right click: add automatically. Alt + right click: side deck."
+                      className="group relative cursor-pointer flex flex-col items-center card-hover-effect"
+                      onClick={() => setSpotlightCard(card)}
+                      onContextMenu={(e) => handleRightClickCard(e, card)}
+                      title="Left-click: Preview | Right-click: Auto Add to Deck | Alt+Right-click: Add to Side"
                     >
-                      {card.image_url ? (
-                        <img
-                          src={card.image_url}
-                          alt={card.name}
-                          className="h-20 w-14 flex-shrink-0 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="h-20 w-14 flex-shrink-0 rounded bg-slate-200" />
-                      )}
-
-                      <div className="min-w-0 flex-1">
-                        <div className="line-clamp-2 text-sm font-black text-slate-950">
+                      <CardImage
+                        src={card.image_url}
+                        alt={card.name}
+                        frameType={card.frame_type}
+                        quantity={inDeck}
+                        missing={missing}
+                        size="full"
+                      />
+                      <div className="mt-1 text-center w-full">
+                        <div className="line-clamp-1 text-[10px] font-bold text-slate-300 group-hover:text-amber-300">
                           {card.name}
                         </div>
-
-                        <CardBadges card={card} />
-                        <CardStats card={card} />
-
-                        <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-black">
-                          <span className="rounded bg-blue-50 px-2 py-1 text-blue-700">
-                            Owned x{owned}
-                          </span>
-
-                          <span className="rounded bg-purple-50 px-2 py-1 text-purple-700">
-                            Auto: {autoSection.toUpperCase()}
-                          </span>
-
-                          {alreadyInThisDeck > 0 && (
-                            <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
-                              This deck x{alreadyInThisDeck}
-                            </span>
-                          )}
-
-                          {usedElsewhere > 0 && (
-                            <span
-                              className="rounded bg-orange-50 px-2 py-1 text-orange-700"
-                              title={otherDecksText}
-                            >
-                              Other decks x{usedElsewhere}
-                            </span>
-                          )}
-
-                          {missingAfterAdd > 0 && (
-                            <span className="rounded bg-red-50 px-2 py-1 text-red-700">
-                              Missing after add x{missingAfterAdd}
-                            </span>
-                          )}
-                        </div>
-
-                        {otherDecksText && (
-                          <div className="mt-1 truncate text-[11px] font-semibold text-orange-700">
-                            Used in: {otherDecksText}
-                          </div>
-                        )}
+                        <div className="text-[9px] text-slate-500">Owned: x{owned}</div>
                       </div>
                     </div>
                   );
-                })
-              )}
-            </div>
-          </aside>
-        </div>
+                })}
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
     </main>
   );

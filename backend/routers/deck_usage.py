@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from backend.database import get_db
 from backend.models import Deck, DeckCard
 from backend.schemas import DeckUsageOut
@@ -16,6 +16,7 @@ def get_deck_usage(
     query = (
         db.query(DeckCard)
         .join(Deck, DeckCard.deck_id == Deck.id)
+        .options(joinedload(DeckCard.deck))
         .filter(Deck.owner_id == OWNER_ID)
     )
 

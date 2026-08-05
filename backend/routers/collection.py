@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, load_only
+from sqlalchemy import exists
 from backend.database import get_db
 from backend.models import CollectionCard, Card
 from backend.schemas import CollectionCardOut, CollectionCardCreate
@@ -9,11 +10,21 @@ from backend.schemas import CollectionCardOut, CollectionCardCreate
 router = APIRouter(prefix="/api/collection", tags=["collection"])
 OWNER_ID = "local"
 
+# Columns to load for Card when joined (excludes heavy raw_json)
+_CARD_LIGHT_COLUMNS = [
+    Card.id, Card.name, Card.type, Card.description, Card.frame_type,
+    Card.race, Card.attribute, Card.archetype,
+    Card.atk, Card.def_val, Card.level, Card.linkval,
+    Card.scale, Card.image_url,
+]
+
 @router.get("", response_model=List[CollectionCardOut])
 def get_collection(db: Session = Depends(get_db)):
     items = (
         db.query(CollectionCard)
-        .join(Card, CollectionCard.card_id == Card.id)
+        .options(
+            joinedload(CollectionCard.card).load_only(*_CARD_LIGHT_COLUMNS)
+        )
         .filter(CollectionCard.owner_id == OWNER_ID)
         .order_by(CollectionCard.updated_at.desc())
         .all()
@@ -56,8 +67,10 @@ def update_collection(payload: CollectionCardCreate, db: Session = Depends(get_d
             "updated_at": existing.updated_at,
         }
     else:
-        # Check if card exists in database first
-        card_exists = db.query(Card).filter(Card.id == card_id).first()
+        # Check if card exists using EXISTS (avoids loading full row)
+        card_exists = db.query(
+            exists().where(Card.id == card_id)
+        ).scalar()
         if not card_exists:
             raise HTTPException(status_code=404, detail=f"Card with id {card_id} not found in database")
 

@@ -2,13 +2,22 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, load_only
+from sqlalchemy import func
 from backend.database import get_db
 from backend.models import Deck, DeckCard, Card
 from backend.schemas import DeckSchema, DeckCreate, DeckUpdate, DeckDetailOut
 
 router = APIRouter(prefix="/api/decks", tags=["decks"])
 OWNER_ID = "local"
+
+# Columns to load for Card when joined (excludes heavy raw_json)
+_CARD_LIGHT_COLUMNS = [
+    Card.id, Card.name, Card.type, Card.description, Card.frame_type,
+    Card.race, Card.attribute, Card.archetype,
+    Card.atk, Card.def_val, Card.level, Card.linkval,
+    Card.scale, Card.image_url,
+]
 
 @router.get("", response_model=List[DeckSchema])
 def get_decks(db: Session = Depends(get_db)):
@@ -47,10 +56,12 @@ def get_deck_detail(deck_id: str, db: Session = Depends(get_db)):
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    # Load deck cards with card details
+    # Eager load deck cards with card details in a single query
     deck_cards = (
         db.query(DeckCard)
-        .join(Card, DeckCard.card_id == Card.id)
+        .options(
+            joinedload(DeckCard.card).load_only(*_CARD_LIGHT_COLUMNS)
+        )
         .filter(DeckCard.deck_id == deck_id)
         .all()
     )

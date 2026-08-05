@@ -1,23 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
-type Card = {
-  id: number;
-  name: string;
-  type: string | null;
-  description: string | null;
-  frame_type: string | null;
-  race: string | null;
-  attribute: string | null;
-  archetype: string | null;
-  atk: number | null;
-  def: number | null;
-  level: number | null;
-  linkval: number | null;
-  scale: number | null;
-  image_url: string | null;
-};
+import CardImage from "@/components/CardImage";
+import CardPreview, { Card } from "@/components/CardPreview";
+import SearchPanel, { FilterState } from "@/components/SearchPanel";
 
 type CollectionItem = {
   card_id: number;
@@ -30,14 +16,12 @@ type SortMode = "recent" | "name" | "quantity";
 
 function isCard(value: unknown): value is Card {
   if (!value || typeof value !== "object") return false;
-
   const card = value as Partial<Card>;
   return typeof card.id === "number" && typeof card.name === "string";
 }
 
 function isCollectionItem(value: unknown): value is CollectionItem {
   if (!value || typeof value !== "object") return false;
-
   const item = value as Partial<CollectionItem>;
   return (
     typeof item.card_id === "number" &&
@@ -47,164 +31,48 @@ function isCollectionItem(value: unknown): value is CollectionItem {
   );
 }
 
-const CARD_TYPES = [
-  "Effect Monster",
-  "Normal Monster",
-  "Ritual Monster",
-  "Fusion Monster",
-  "Synchro Monster",
-  "XYZ Monster",
-  "Pendulum Effect Monster",
-  "Link Monster",
-  "Spell Card",
-  "Trap Card",
-];
-
-const RACES_AND_SUBTYPES = [
-  "Dragon",
-  "Spellcaster",
-  "Warrior",
-  "Machine",
-  "Fiend",
-  "Fairy",
-  "Zombie",
-  "Beast",
-  "Beast-Warrior",
-  "Winged Beast",
-  "Aqua",
-  "Pyro",
-  "Thunder",
-  "Rock",
-  "Plant",
-  "Insect",
-  "Fish",
-  "Sea Serpent",
-  "Reptile",
-  "Psychic",
-  "Dinosaur",
-  "Cyberse",
-  "Wyrm",
-  "Divine-Beast",
-  "Field",
-  "Equip",
-  "Quick-Play",
-  "Continuous",
-  "Ritual",
-  "Counter",
-  "Normal",
-];
-
-const ATTRIBUTES = ["DARK", "LIGHT", "EARTH", "WATER", "FIRE", "WIND", "DIVINE"];
-
-function CardBadges({ card }: { card: Card }) {
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {card.type && (
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-          {card.type}
-        </span>
-      )}
-
-      {card.race && (
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-          {card.race}
-        </span>
-      )}
-
-      {card.attribute && (
-        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-          {card.attribute}
-        </span>
-      )}
-
-      {card.archetype && (
-        <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">
-          {card.archetype}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function CardStats({ card }: { card: Card }) {
-  const hasMonsterStats =
-    card.atk !== null ||
-    card.def !== null ||
-    card.level !== null ||
-    card.linkval !== null ||
-    card.scale !== null;
-
-  if (!hasMonsterStats) {
-    return null;
-  }
-
-  return (
-    <div className="mt-2 flex flex-wrap gap-2 text-sm font-bold text-slate-700">
-      {card.atk !== null && <span>ATK {card.atk}</span>}
-      {card.def !== null && <span>DEF {card.def}</span>}
-      {card.level !== null && <span>Level {card.level}</span>}
-      {card.linkval !== null && <span>Link {card.linkval}</span>}
-      {card.scale !== null && <span>Scale {card.scale}</span>}
-    </div>
-  );
-}
+const DEFAULT_FILTERS: FilterState = {
+  query: "",
+  type: "all",
+  race: "all",
+  attribute: "all",
+  archetype: "",
+  minAtk: "",
+  maxAtk: "",
+  minDef: "",
+  maxDef: "",
+  minLevel: "",
+  maxLevel: "",
+};
 
 export default function CollectionPage() {
-  const [addQuery, setAddQuery] = useState("");
-  const [collectionQuery, setCollectionQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Card[]>([]);
   const [collection, setCollection] = useState<CollectionItem[]>([]);
+  const [searchFilters, setSearchFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [searchResults, setSearchResults] = useState<Card[]>([]);
+  const [spotlightCard, setSpotlightCard] = useState<Card | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
-
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [raceFilter, setRaceFilter] = useState("all");
-  const [attributeFilter, setAttributeFilter] = useState("all");
-  const [archetypeFilter, setArchetypeFilter] = useState("");
-  const [minAtk, setMinAtk] = useState("");
-  const [maxAtk, setMaxAtk] = useState("");
-  const [minDef, setMinDef] = useState("");
-  const [maxDef, setMaxDef] = useState("");
-  const [minLevel, setMinLevel] = useState("");
-  const [maxLevel, setMaxLevel] = useState("");
-
+  const [collectionFilter, setCollectionFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function loadCollection() {
     try {
       const response = await fetch("/api/collection", { cache: "no-store" });
-
       if (!response.ok) {
-        throw new Error(
-          `Collection request failed: ${response.status} ${await response.text()}`
-        );
+        throw new Error(`Failed to load collection: ${response.status}`);
       }
-
       const data: unknown = await response.json();
-
-      if (!Array.isArray(data)) {
-        throw new Error("Unexpected collection response format");
+      if (Array.isArray(data)) {
+        const valid = data.filter(isCollectionItem);
+        setCollection(valid);
+        if (valid.length > 0 && !spotlightCard) {
+          setSpotlightCard(valid[0].card);
+        }
       }
-
-      const validItems = data.filter(isCollectionItem);
-
-      if (validItems.length !== data.length) {
-        console.warn(
-          "Ignored malformed collection rows:",
-          data.filter((item) => !isCollectionItem(item))
-        );
-      }
-
-      setCollection(validItems);
       setError("");
-    } catch (loadError) {
-      console.error(loadError);
-      setCollection([]);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Could not load collection"
-      );
+    } catch (err) {
+      console.error(err);
+      setError("Could not load collection");
     }
   }
 
@@ -212,505 +80,295 @@ export default function CollectionPage() {
     loadCollection();
   }, []);
 
+  // Card Search Debounce
   useEffect(() => {
     const timeout = setTimeout(async () => {
       const params = new URLSearchParams();
-      const trimmed = addQuery.trim();
+      const q = searchFilters.query.trim();
 
-      if (trimmed.length >= 2) {
-        params.set("q", trimmed);
-      }
-
-      if (typeFilter !== "all") {
-        params.set("type", typeFilter);
-      }
-
-      if (raceFilter !== "all") {
-        params.set("race", raceFilter);
-      }
-
-      if (attributeFilter !== "all") {
-        params.set("attribute", attributeFilter);
-      }
-
-      if (archetypeFilter.trim()) {
-        params.set("archetype", archetypeFilter.trim());
-      }
-
-      if (minAtk) params.set("minAtk", minAtk);
-      if (maxAtk) params.set("maxAtk", maxAtk);
-      if (minDef) params.set("minDef", minDef);
-      if (maxDef) params.set("maxDef", maxDef);
-      if (minLevel) params.set("minLevel", minLevel);
-      if (maxLevel) params.set("maxLevel", maxLevel);
+      if (q.length >= 2) params.set("q", q);
+      if (searchFilters.type !== "all") params.set("type", searchFilters.type);
+      if (searchFilters.race !== "all") params.set("race", searchFilters.race);
+      if (searchFilters.attribute !== "all") params.set("attribute", searchFilters.attribute);
+      if (searchFilters.archetype.trim()) params.set("archetype", searchFilters.archetype.trim());
+      if (searchFilters.minAtk) params.set("minAtk", searchFilters.minAtk);
+      if (searchFilters.maxAtk) params.set("maxAtk", searchFilters.maxAtk);
+      if (searchFilters.minDef) params.set("minDef", searchFilters.minDef);
+      if (searchFilters.maxDef) params.set("maxDef", searchFilters.maxDef);
+      if (searchFilters.minLevel) params.set("minLevel", searchFilters.minLevel);
+      if (searchFilters.maxLevel) params.set("maxLevel", searchFilters.maxLevel);
 
       if (params.toString() === "") {
-        setSuggestions([]);
+        setSearchResults([]);
         return;
       }
 
       try {
-        const response = await fetch(`/api/cards/search?${params.toString()}`);
-
-        if (!response.ok) {
-          throw new Error(
-            `Card search failed: ${response.status} ${await response.text()}`
-          );
+        const res = await fetch(`/api/cards/search?${params.toString()}`);
+        if (res.ok) {
+          const data: unknown = await res.json();
+          setSearchResults(Array.isArray(data) ? data.filter(isCard) : []);
         }
-
-        const data: unknown = await response.json();
-        setSuggestions(Array.isArray(data) ? data.filter(isCard) : []);
-      } catch (searchError) {
-        console.error(searchError);
-        setSuggestions([]);
+      } catch (err) {
+        console.error(err);
+        setSearchResults([]);
       }
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [
-    addQuery,
-    typeFilter,
-    raceFilter,
-    attributeFilter,
-    archetypeFilter,
-    minAtk,
-    maxAtk,
-    minDef,
-    maxDef,
-    minLevel,
-    maxLevel,
-  ]);
+  }, [searchFilters]);
 
-  async function setOwnedQuantity(card: Card, quantity: number) {
+  async function updateQuantity(card: Card, newQty: number) {
     setLoading(true);
-
     try {
       const response = await fetch("/api/collection", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           card_id: card.id,
-          quantity_owned: quantity,
+          quantity_owned: newQty,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Collection update failed: ${response.status} ${await response.text()}`
-        );
+        throw new Error("Update failed");
       }
 
       await loadCollection();
-    } catch (updateError) {
-      console.error(updateError);
-      setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "Could not update collection"
-      );
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update collection quantity");
     } finally {
       setLoading(false);
     }
   }
 
-  async function addOne(card: Card) {
-    const currentOwned = getOwnedQuantity(card.id);
-    await setOwnedQuantity(card, currentOwned + 1);
+  function getOwnedQty(cardId: number): number {
+    return collection.find((item) => item.card_id === cardId)?.quantity_owned ?? 0;
   }
 
-  function getOwnedQuantity(cardId: number) {
-    const item = collection.find((entry) => entry.card_id === cardId);
-    return item?.quantity_owned ?? 0;
-  }
-
-  function resetAddFilters() {
-    setAddQuery("");
-    setTypeFilter("all");
-    setRaceFilter("all");
-    setAttributeFilter("all");
-    setArchetypeFilter("");
-    setMinAtk("");
-    setMaxAtk("");
-    setMinDef("");
-    setMaxDef("");
-    setMinLevel("");
-    setMaxLevel("");
-    setSuggestions([]);
-  }
-
-  const totalUniqueCards = collection.length;
-
-  const totalCopies = collection.reduce(
-    (total, item) => total + item.quantity_owned,
-    0
-  );
+  const totalUnique = collection.length;
+  const totalCopies = collection.reduce((acc, curr) => acc + curr.quantity_owned, 0);
 
   const filteredCollection = useMemo(() => {
-    const query = collectionQuery.trim().toLowerCase();
+    const q = collectionFilter.trim().toLowerCase();
+    let list = collection;
 
-    let items = collection;
-
-    if (query.length > 0) {
-      items = collection.filter((item) => {
-        const card = item.card;
-
-        const searchable = [
-          card.name,
-          card.type,
-          card.description,
-          card.race,
-          card.attribute,
-          card.archetype,
-          card.atk?.toString(),
-          card.def?.toString(),
-          card.level?.toString(),
-        ]
+    if (q) {
+      list = collection.filter((item) => {
+        const c = item.card;
+        const text = [c.name, c.type, c.race, c.attribute, c.archetype]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-
-        return searchable.includes(query);
+        return text.includes(q);
       });
     }
 
-    return [...items].sort((a, b) => {
-      if (sortMode === "name") {
-        return a.card.name.localeCompare(b.card.name);
-      }
-
-      if (sortMode === "quantity") {
-        return b.quantity_owned - a.quantity_owned;
-      }
-
-      return (
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
+    return [...list].sort((a, b) => {
+      if (sortMode === "name") return a.card.name.localeCompare(b.card.name);
+      if (sortMode === "quantity") return b.quantity_owned - a.quantity_owned;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
-  }, [collection, collectionQuery, sortMode]);
+  }, [collection, collectionFilter, sortMode]);
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-950">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">My Collection</h1>
-          <p className="mt-2 text-slate-600">
-            Search the full card database, add cards you own, and filter your
-            collection.
+    <main className="p-4 lg:p-6 max-w-[1800px] mx-auto space-y-6">
+      {/* Header Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-2xl border border-slate-800/80 bg-gradient-to-r from-[#0f172a] via-[#131d35] to-[#0f172a] p-6 shadow-2xl backdrop-blur-md">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🎴</span>
+            <h1 className="text-2xl lg:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500">
+              CARD VAULT & COLLECTION
+            </h1>
+          </div>
+          <p className="text-xs lg:text-sm text-slate-400 mt-1">
+            Search the Yu-Gi-Oh! card database, register owned copies, and manage your vault.
           </p>
-        </header>
+        </div>
 
-        {error && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-            {error}
-          </div>
-        )}
-
-        <section className="mb-8 rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-xl font-bold">Add a card</h2>
-              <p className="text-sm text-slate-600">
-                Search by name, type, race/subtype, attribute, archetype, ATK,
-                DEF, or level.
-              </p>
+        {/* Stats counters */}
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-center min-w-28 shadow-lg shadow-amber-500/5">
+            <div className="text-[10px] font-extrabold text-amber-400/80 uppercase tracking-widest">
+              Unique Cards
             </div>
-
-            <div className="flex gap-3">
-              <div className="rounded-xl bg-slate-100 px-4 py-2 text-center">
-                <div className="text-xs font-medium text-slate-500">
-                  Unique cards
-                </div>
-                <div className="text-lg font-bold">{totalUniqueCards}</div>
-              </div>
-
-              <div className="rounded-xl bg-slate-100 px-4 py-2 text-center">
-                <div className="text-xs font-medium text-slate-500">
-                  Total copies
-                </div>
-                <div className="text-lg font-bold">{totalCopies}</div>
-              </div>
+            <div className="text-xl font-black text-amber-300">{totalUnique}</div>
+          </div>
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-center min-w-28 shadow-lg shadow-blue-500/5">
+            <div className="text-[10px] font-extrabold text-blue-400/80 uppercase tracking-widest">
+              Total Copies
             </div>
+            <div className="text-xl font-black text-blue-300">{totalCopies}</div>
           </div>
+        </div>
+      </div>
 
-          <input
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg outline-none ring-blue-500 focus:ring-2"
-            placeholder="Search card name..."
-            value={addQuery}
-            onChange={(event) => setAddQuery(event.target.value)}
-          />
+      {error && (
+        <div className="rounded-xl border border-rose-500/50 bg-rose-950/40 p-4 text-xs font-bold text-rose-300">
+          ⚠️ {error}
+        </div>
+      )}
 
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
-            <select
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value)}
-            >
-              <option value="all">All card types</option>
-              {CARD_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+      {/* Database Search Section */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-black text-slate-200 flex items-center gap-2">
+          <span>➕</span> Add Cards to Vault
+        </h2>
 
-            <select
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              value={raceFilter}
-              onChange={(event) => setRaceFilter(event.target.value)}
-            >
-              <option value="all">All races/subtypes</option>
-              {RACES_AND_SUBTYPES.map((race) => (
-                <option key={race} value={race}>
-                  {race}
-                </option>
-              ))}
-            </select>
+        <SearchPanel
+          filters={searchFilters}
+          onChange={setSearchFilters}
+          onReset={() => setSearchFilters(DEFAULT_FILTERS)}
+          placeholder="Search card database to add..."
+        />
 
-            <select
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              value={attributeFilter}
-              onChange={(event) => setAttributeFilter(event.target.value)}
-            >
-              <option value="all">All attributes</option>
-              {ATTRIBUTES.map((attribute) => (
-                <option key={attribute} value={attribute}>
-                  {attribute}
-                </option>
-              ))}
-            </select>
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Archetype, e.g. Blue-Eyes"
-              value={archetypeFilter}
-              onChange={(event) => setArchetypeFilter(event.target.value)}
-            />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-6">
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Min ATK"
-              value={minAtk}
-              onChange={(event) => setMinAtk(event.target.value)}
-            />
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Max ATK"
-              value={maxAtk}
-              onChange={(event) => setMaxAtk(event.target.value)}
-            />
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Min DEF"
-              value={minDef}
-              onChange={(event) => setMinDef(event.target.value)}
-            />
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Max DEF"
-              value={maxDef}
-              onChange={(event) => setMaxDef(event.target.value)}
-            />
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Min Level"
-              value={minLevel}
-              onChange={(event) => setMinLevel(event.target.value)}
-            />
-
-            <input
-              className="rounded-xl border border-slate-300 px-3 py-2"
-              placeholder="Max Level"
-              value={maxLevel}
-              onChange={(event) => setMaxLevel(event.target.value)}
-            />
-          </div>
-
-          <button
-            className="mt-3 rounded-xl border border-slate-300 px-4 py-2 font-semibold hover:bg-slate-100"
-            onClick={resetAddFilters}
-          >
-            Reset search filters
-          </button>
-
-          {suggestions.length > 0 && (
-            <div className="mt-4 max-h-[600px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-              {suggestions.map((card) => {
-                const owned = getOwnedQuantity(card.id);
-
+        {/* Search Results Grid */}
+        {searchResults.length > 0 && (
+          <div className="rounded-2xl border border-slate-800/80 bg-slate-950/80 p-4 shadow-2xl space-y-3">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Search Results ({searchResults.length})
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3">
+              {searchResults.map((card) => {
+                const owned = getOwnedQty(card.id);
                 return (
                   <div
                     key={card.id}
-                    className="flex items-start gap-4 border-b border-slate-100 p-4 last:border-b-0"
+                    className="group relative cursor-pointer flex flex-col items-center card-hover-effect"
+                    onClick={() => setSpotlightCard(card)}
                   >
-                    {card.image_url ? (
-                      <img
-                        src={card.image_url}
-                        alt={card.name}
-                        className="h-28 w-20 flex-shrink-0 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="h-28 w-20 flex-shrink-0 rounded bg-slate-200" />
-                    )}
-
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xl font-black text-slate-950">
+                    <CardImage
+                      src={card.image_url}
+                      alt={card.name}
+                      frameType={card.frame_type}
+                      quantity={owned}
+                      size="full"
+                    />
+                    <div className="mt-1 text-center w-full">
+                      <div className="line-clamp-1 text-[11px] font-bold text-slate-200 group-hover:text-amber-300">
                         {card.name}
                       </div>
-
-                      <CardBadges card={card} />
-                      <CardStats card={card} />
-
-                      {card.description && (
-                        <p className="mt-2 line-clamp-2 text-sm text-slate-600">
-                          {card.description}
-                        </p>
-                      )}
-
-                      <div className="mt-3 text-lg font-black text-blue-700">
-                        Owned: x{owned}
-                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(card, owned + 1);
+                        }}
+                        disabled={loading}
+                        className="mt-1 w-full rounded-md border border-amber-500/40 bg-amber-500/20 py-0.5 text-[10px] font-black text-amber-300 hover:bg-amber-500/40 transition disabled:opacity-50"
+                      >
+                        + Add 1
+                      </button>
                     </div>
-
-                    <button
-                      className="rounded-xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-                      onClick={() => addOne(card)}
-                      disabled={loading}
-                    >
-                      + Add one
-                    </button>
                   </div>
                 );
               })}
             </div>
-          )}
-        </section>
+          </div>
+        )}
+      </section>
 
-        <section className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h2 className="text-xl font-bold">Owned cards</h2>
-              <p className="text-sm text-slate-600">
-                Filter only inside cards you already added.
-              </p>
-            </div>
+      {/* Collection Grid + Spotlight Preview Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+        {/* Left Column: Collection Grid */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-900/60 p-3.5 backdrop-blur-md">
+            <h2 className="text-lg font-black text-slate-200 flex items-center gap-2">
+              <span>📚</span> Vault Contents ({filteredCollection.length})
+            </h2>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex items-center gap-2.5">
               <input
-                className="rounded-xl border border-slate-300 px-4 py-2 outline-none ring-blue-500 focus:ring-2"
-                placeholder="Filter my collection..."
-                value={collectionQuery}
-                onChange={(event) => setCollectionQuery(event.target.value)}
+                type="text"
+                placeholder="Filter vault..."
+                className="rounded-xl border border-slate-700/80 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                value={collectionFilter}
+                onChange={(e) => setCollectionFilter(e.target.value)}
               />
 
               <select
-                className="rounded-xl border border-slate-300 px-4 py-2"
+                className="rounded-xl border border-slate-700/80 bg-slate-950 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                 value={sortMode}
-                onChange={(event) =>
-                  setSortMode(event.target.value as SortMode)
-                }
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
               >
-                <option value="recent">Sort: recently updated</option>
-                <option value="name">Sort: name A-Z</option>
-                <option value="quantity">Sort: highest quantity</option>
+                <option value="recent">Recently Added</option>
+                <option value="name">Name A-Z</option>
+                <option value="quantity">Highest Quantity</option>
               </select>
             </div>
           </div>
 
-          {collection.length === 0 ? (
-            <p className="rounded-xl bg-slate-100 p-4 text-slate-600">
-              No cards in collection yet.
-            </p>
-          ) : filteredCollection.length === 0 ? (
-            <p className="rounded-xl bg-slate-100 p-4 text-slate-600">
-              No owned cards match your filter.
-            </p>
+          {filteredCollection.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/40 p-12 text-center text-slate-500">
+              <div className="text-4xl mb-2">📭</div>
+              <div className="font-bold text-sm text-slate-400">Vault is Empty</div>
+              <p className="text-xs mt-1">Search the database above to start adding cards to your collection.</p>
+            </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3">
               {filteredCollection.map((item) => (
                 <div
                   key={item.card_id}
-                  className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between"
+                  className={`group relative cursor-pointer flex flex-col items-center p-1.5 rounded-xl border transition ${
+                    spotlightCard?.id === item.card_id
+                      ? "border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10"
+                      : "border-slate-800/80 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-800/60"
+                  }`}
+                  onClick={() => setSpotlightCard(item.card)}
                 >
-                  <div className="flex min-w-0 items-start gap-4">
-                    {item.card.image_url ? (
-                      <img
-                        src={item.card.image_url}
-                        alt={item.card.name}
-                        className="h-28 w-20 flex-shrink-0 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="h-28 w-20 flex-shrink-0 rounded bg-slate-200" />
-                    )}
-
-                    <div className="min-w-0">
-                      <div className="text-xl font-black text-slate-950">
-                        {item.card.name}
-                      </div>
-
-                      <CardBadges card={item.card} />
-                      <CardStats card={item.card} />
-
-                      {item.card.description && (
-                        <p className="mt-2 line-clamp-2 max-w-2xl text-sm text-slate-600">
-                          {item.card.description}
-                        </p>
-                      )}
-
-                      <div className="mt-3 text-lg font-black text-blue-700">
-                        Owned: x{item.quantity_owned}
-                      </div>
+                  <CardImage
+                    src={item.card.image_url}
+                    alt={item.card.name}
+                    frameType={item.card.frame_type}
+                    quantity={item.quantity_owned}
+                    size="full"
+                  />
+                  
+                  <div className="mt-1 text-center w-full">
+                    <div className="line-clamp-1 text-[11px] font-bold text-slate-200">
+                      {item.card.name}
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between gap-2 sm:justify-end">
-                    <button
-                      className="rounded-xl border border-slate-300 px-4 py-2 text-lg font-bold hover:bg-slate-100"
-                      onClick={() =>
-                        setOwnedQuantity(
-                          item.card,
-                          Math.max(0, item.quantity_owned - 1)
-                        )
-                      }
-                      disabled={loading}
-                    >
-                      -
-                    </button>
-
-                    <span className="min-w-12 rounded-xl bg-slate-100 px-4 py-2 text-center text-xl font-black">
-                      {item.quantity_owned}
-                    </span>
-
-                    <button
-                      className="rounded-xl border border-slate-300 px-4 py-2 text-lg font-bold hover:bg-slate-100"
-                      onClick={() =>
-                        setOwnedQuantity(item.card, item.quantity_owned + 1)
-                      }
-                      disabled={loading}
-                    >
-                      +
-                    </button>
-
-                    <button
-                      className="rounded-xl border border-red-200 px-4 py-2 font-semibold text-red-600 hover:bg-red-50"
-                      onClick={() => setOwnedQuantity(item.card, 0)}
-                      disabled={loading}
-                    >
-                      Remove
-                    </button>
+                    <div className="mt-1.5 flex items-center justify-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.card, Math.max(0, item.quantity_owned - 1));
+                        }}
+                        disabled={loading}
+                        className="h-6 w-6 rounded bg-slate-800 text-xs font-black text-slate-300 hover:bg-slate-700 border border-slate-700"
+                      >
+                        -
+                      </button>
+                      <span className="min-w-6 text-center text-xs font-black text-amber-300">
+                        {item.quantity_owned}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateQuantity(item.card, item.quantity_owned + 1);
+                        }}
+                        disabled={loading}
+                        className="h-6 w-6 rounded bg-slate-800 text-xs font-black text-slate-300 hover:bg-slate-700 border border-slate-700"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </section>
+
+        {/* Right Column: Card Preview Spotlight */}
+        <aside className="sticky top-6">
+          <CardPreview
+            card={spotlightCard}
+            ownedQuantity={spotlightCard ? getOwnedQty(spotlightCard.id) : 0}
+          />
+        </aside>
       </div>
     </main>
   );

@@ -1,11 +1,19 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from backend.database import get_db
 from backend.models import Card
 from backend.schemas import CardSchema
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
+
+# Columns to load for search results (excludes heavy raw_json and description)
+SEARCH_COLUMNS = [
+    Card.id, Card.name, Card.type, Card.frame_type,
+    Card.race, Card.attribute, Card.archetype,
+    Card.atk, Card.def_val, Card.level, Card.linkval,
+    Card.scale, Card.image_url,
+]
 
 @router.get("/search", response_model=List[CardSchema])
 def search_cards(
@@ -20,6 +28,8 @@ def search_cards(
     maxDef: Optional[int] = Query(None),
     minLevel: Optional[int] = Query(None),
     maxLevel: Optional[int] = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
     # Check if any filter is set
@@ -40,7 +50,7 @@ def search_cards(
     if not has_filter:
         return []
 
-    query = db.query(Card)
+    query = db.query(Card).options(load_only(*SEARCH_COLUMNS))
 
     if q and len(q.strip()) >= 2:
         query = query.filter(Card.name.ilike(f"%{q.strip()}%"))
@@ -75,5 +85,5 @@ def search_cards(
     if maxLevel is not None:
         query = query.filter(Card.level <= maxLevel)
 
-    cards = query.order_by(Card.name.asc()).limit(50).all()
+    cards = query.order_by(Card.name.asc()).offset(offset).limit(limit).all()
     return cards
