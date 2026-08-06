@@ -200,7 +200,7 @@ export default function NeededCardsPage() {
                           Owned: x{item.quantity_owned}
                         </span>
                         <span className="rounded bg-slate-800 text-slate-300 border border-slate-700 px-1.5 py-0.5">
-                          Total Needed: x{item.total_needed}
+                          Max Single Deck: x{item.total_needed}
                         </span>
                       </div>
                     </div>

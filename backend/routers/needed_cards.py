@@ -39,7 +39,7 @@ def get_needed_cards(db: Session = Depends(get_db)):
 
     owned_by_card = {col.card_id: col.quantity_owned for col in collection_rows}
 
-    # 3. Aggregate needed counts
+    # 3. Aggregate needed counts per deck
     needed_map: Dict[int, Dict[str, Any]] = {}
 
     for row in deck_rows:
@@ -54,14 +54,12 @@ def get_needed_cards(db: Session = Depends(get_db)):
         if card_id not in needed_map:
             needed_map[card_id] = {
                 "card_id": card_id,
-                "total_needed": 0,
                 "quantity_owned": owned_by_card.get(card_id, 0),
                 "card": card,
                 "decks_dict": {},
             }
 
         entry = needed_map[card_id]
-        entry["total_needed"] += quantity
 
         if deck.id in entry["decks_dict"]:
             entry["decks_dict"][deck.id]["quantity"] += quantity
@@ -72,19 +70,25 @@ def get_needed_cards(db: Session = Depends(get_db)):
                 "quantity": quantity,
             }
 
-    # 4. Calculate missing quantities & format response
+    # 4. Calculate missing quantities based on MAX single deck requirement
     needed_list = []
     for card_id, entry in needed_map.items():
-        total_needed = entry["total_needed"]
+        # Yu-Gi-Oh players swap cards between decks.
+        # Required copies = max copies used in ANY single deck (not the sum across all decks).
+        max_needed_in_single_deck = (
+            max(d["quantity"] for d in entry["decks_dict"].values())
+            if entry["decks_dict"]
+            else 0
+        )
         quantity_owned = entry["quantity_owned"]
-        missing_quantity = max(0, total_needed - quantity_owned)
+        missing_quantity = max(0, max_needed_in_single_deck - quantity_owned)
 
         if missing_quantity > 0:
             decks_list = list(entry["decks_dict"].values())
             needed_list.append({
                 "card_id": card_id,
                 "missing_quantity": missing_quantity,
-                "total_needed": total_needed,
+                "total_needed": max_needed_in_single_deck,
                 "quantity_owned": quantity_owned,
                 "card": entry["card"],
                 "decks": decks_list,

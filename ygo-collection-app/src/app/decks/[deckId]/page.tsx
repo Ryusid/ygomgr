@@ -223,8 +223,7 @@ export default function DeckEditorPage() {
   function getMissingQuantity(cardId: number) {
     const owned = getOwnedQuantity(cardId);
     const inDeck = getQuantityInDeck(cardId);
-    const elsewhere = getUsedElsewhere(cardId);
-    return Math.max(0, inDeck + elsewhere - owned);
+    return Math.max(0, inDeck - owned);
   }
 
   function countSection(section: Section) {
